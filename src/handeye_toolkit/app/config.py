@@ -1,4 +1,4 @@
-"""DaBai/Piper 产品自身的严格 YAML 配置。"""
+"""Piper 手眼标定产品自身的严格 YAML 配置。"""
 
 from __future__ import annotations
 
@@ -6,15 +6,16 @@ import math
 import os
 import tempfile
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from ..domain import AcquisitionDescriptor, CalibrationMode, ComponentDescriptor, JsonValue
 from .policy import STANDARD_PROFILE, resolve_plan
 
 DEFAULT_CONFIG_PATH = Path("configs/handeye.yaml")
+SUPPORTED_CAMERA_ADAPTERS = {"dabai", "opencv-rgb", "realsense-d435"}
 
 
 def _exact(value: Mapping[str, object], expected: set[str], label: str) -> None:
@@ -60,6 +61,8 @@ class ProductConfig:
     square_size_mm: float
     marker_size_mm: float
     dictionary: str
+    camera_adapter: str = "dabai"
+    camera_settings: Mapping[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "mode", CalibrationMode.parse(self.mode))
@@ -70,6 +73,25 @@ class ProductConfig:
             "camera_serial_number",
             _text(self.camera_serial_number, "camera_serial_number"),
         )
+        adapter = _text(self.camera_adapter, "camera_adapter")
+        if adapter not in SUPPORTED_CAMERA_ADAPTERS:
+            raise ValueError(f"camera_adapter 无效：{adapter}")
+        component = ComponentDescriptor(
+            adapter,
+            self.camera_serial_number,
+            {"camera": "camera"},
+            self.camera_settings,
+        )
+        if adapter == "realsense-d435":
+            from ..adapters.realsense import create_realsense_d435_camera
+
+            create_realsense_d435_camera(component)
+        elif adapter == "opencv-rgb":
+            from ..adapters.opencv_rgb import create_opencv_rgb_camera
+
+            create_opencv_rgb_camera(component)
+        object.__setattr__(self, "camera_adapter", adapter)
+        object.__setattr__(self, "camera_settings", component.settings)
         object.__setattr__(
             self,
             "piper_can_channel",
@@ -105,6 +127,12 @@ class ProductConfig:
         }
 
     @property
+    def camera_source_id(self) -> str:
+        """返回通用相机来源 ID；保留旧字段名以兼容已有调用方。"""
+
+        return self.camera_serial_number
+
+    @property
     def plan(self):
         return resolve_plan(
             profile=self.policy,
@@ -114,12 +142,15 @@ class ProductConfig:
 
     @property
     def acquisition(self) -> AcquisitionDescriptor:
+        camera_settings = dict(self.camera_settings)
+        if self.camera_adapter == "dabai":
+            camera_settings.setdefault("stream_profile", "default-color")
         return AcquisitionDescriptor(
             camera=ComponentDescriptor(
-                "dabai",
+                self.camera_adapter,
                 self.camera_serial_number,
                 {"camera": "camera"},
-                {"stream_profile": "default-color"},
+                camera_settings,
             ),
             flange=ComponentDescriptor(
                 "piper-readonly",
@@ -141,10 +172,24 @@ class ProductConfig:
         )
 
     def as_dict(self) -> dict[str, JsonValue]:
+        if self.camera_adapter == "dabai" and not self.camera_settings:
+            camera: dict[str, JsonValue] = {"serial_number": self.camera_serial_number}
+        else:
+            settings = ComponentDescriptor(
+                self.camera_adapter,
+                self.camera_serial_number,
+                {"camera": "camera"},
+                self.camera_settings,
+            ).as_dict()["settings"]
+            camera = {
+                "adapter": self.camera_adapter,
+                "source_id": self.camera_serial_number,
+                "settings": settings,
+            }
         return {
             "mode": self.mode.value,
             "policy": self.policy,
-            "camera": {"serial_number": self.camera_serial_number},
+            "camera": camera,
             "piper": {
                 "model": self.piper_model,
                 "firmware_profile": self.piper_firmware_profile,
@@ -172,8 +217,18 @@ def validate_product_config(value: Mapping[str, object]) -> ProductConfig:
         raise ValueError(f"config.policy 当前仅支持 {STANDARD_PROFILE}")
 
     camera = _mapping(document["camera"], "config.camera")
-    _exact(camera, {"serial_number"}, "config.camera")
-    serial = _text(camera["serial_number"], "config.camera.serial_number")
+    if set(camera) == {"serial_number"}:
+        camera_adapter = "dabai"
+        camera_source_id = _text(camera["serial_number"], "config.camera.serial_number")
+        camera_settings: dict[str, JsonValue] = {}
+    else:
+        _exact(camera, {"adapter", "source_id", "settings"}, "config.camera")
+        camera_adapter = _text(camera["adapter"], "config.camera.adapter")
+        if camera_adapter not in SUPPORTED_CAMERA_ADAPTERS:
+            raise ValueError(f"config.camera.adapter 无效：{camera_adapter}")
+        camera_source_id = _text(camera["source_id"], "config.camera.source_id")
+        raw_camera_settings = _mapping(camera["settings"], "config.camera.settings")
+        camera_settings = cast(dict[str, JsonValue], raw_camera_settings)
 
     piper = _mapping(document["piper"], "config.piper")
     _exact(piper, {"model", "firmware_profile", "can_channel"}, "config.piper")
@@ -204,7 +259,7 @@ def validate_product_config(value: Mapping[str, object]) -> ProductConfig:
     result = ProductConfig(
         mode,
         policy,
-        serial,
+        camera_source_id,
         model,
         firmware,
         channel,
@@ -212,6 +267,8 @@ def validate_product_config(value: Mapping[str, object]) -> ProductConfig:
         square_size,
         marker_size,
         dictionary,
+        camera_adapter,
+        camera_settings,
     )
     result.plan
     return result
@@ -290,6 +347,7 @@ def write_config_template(
 __all__ = [
     "DEFAULT_CONFIG_PATH",
     "ProductConfig",
+    "SUPPORTED_CAMERA_ADAPTERS",
     "load_product_config",
     "validate_product_config",
     "write_product_config",

@@ -125,11 +125,15 @@ def _config_summary(config: Any, *, effective_channel: str | None = None) -> str
     channel = str(piper["can_channel"])
     if effective_channel is not None and effective_channel != channel:
         channel = f"{channel}（本次任务覆盖为 {effective_channel}）"
+    if "serial_number" in camera:
+        camera_summary = f"DaBai 相机序列号：{camera['serial_number']}"
+    else:
+        camera_summary = f"相机适配器：{camera['adapter']}；来源：{camera['source_id']}"
     return "\n".join(
         (
             "配置摘要：",
             f"  模式：{document['mode']}；策略：{document['policy']}",
-            f"  DaBai 相机序列号：{camera['serial_number']}",
+            f"  {camera_summary}",
             f"  Piper：{piper['model']}；固件：{piper['firmware_profile']}；CAN：{channel}",
             f"  ChArUco：{target['squares'][0]} x {target['squares'][1]} 方格；"
             f"方格 {target['square_size_mm']} mm；Marker {target['marker_size_mm']} mm；"

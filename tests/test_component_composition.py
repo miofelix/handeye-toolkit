@@ -129,7 +129,7 @@ def test_builtin_registry_composes_current_supported_components() -> None:
 
     rig = ComponentRigFactory(config.acquisition, registry).create(config.plan)
 
-    assert registry.camera_adapters == ("dabai",)
+    assert registry.camera_adapters == ("dabai", "opencv-rgb", "realsense-d435")
     assert registry.flange_adapters == ("piper-readonly",)
     assert registry.target_adapters == ("charuco",)
     assert type(rig.camera).__name__ == "DaBaiCamera"

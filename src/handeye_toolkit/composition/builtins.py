@@ -10,12 +10,16 @@ def create_builtin_registry() -> ComponentRegistry:
 
     # 保持公共组合 API 轻量；仅在请求内置实现时导入运行时后端。
     from ..adapters.dabai import create_dabai_camera
+    from ..adapters.opencv_rgb import create_opencv_rgb_camera
     from ..adapters.piper import create_piper_flange_source
+    from ..adapters.realsense import create_realsense_d435_camera
     from ..algorithms.charuco import create_charuco_detector
 
     return (
         ComponentRegistry()
         .register_camera("dabai", create_dabai_camera)
+        .register_camera("opencv-rgb", create_opencv_rgb_camera)
+        .register_camera("realsense-d435", create_realsense_d435_camera)
         .register_flange("piper-readonly", create_piper_flange_source)
         .register_target("charuco", create_charuco_detector)
     )

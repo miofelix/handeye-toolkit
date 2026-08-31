@@ -8,6 +8,7 @@ from conftest import product_document
 from handeye_toolkit import cli
 from handeye_toolkit.app.config import validate_product_config, write_product_config
 from handeye_toolkit.cli_wizard import (
+    _config_summary,
     _run_calibration,
     choose_ui,
     collect_product_config,
@@ -58,6 +59,17 @@ def test_collect_product_config_uses_defaults_and_strict_values() -> None:
         },
     }
     assert any("配置摘要" in message for message in messages)
+
+
+def test_config_summary_supports_generic_camera_descriptor() -> None:
+    document = product_document()
+    document["camera"] = {
+        "adapter": "realsense-d435",
+        "source_id": "<camera-serial>",
+        "settings": {"warmup_frames": 0},
+    }
+    summary = _config_summary(validate_product_config(document))
+    assert "相机适配器：realsense-d435" in summary
 
 
 def test_collect_product_config_rejects_invalid_marker_size_then_retries() -> None:

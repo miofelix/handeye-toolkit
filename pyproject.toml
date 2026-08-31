@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "handeye-toolkit"
 version = "1.0.0"
-description = "独立的 DaBai/Piper 手眼标定工具，提供可恢复采集、质量门禁和可复算脱敏制品"
+description = "支持多种相机和 Piper 只读反馈的手眼标定工具"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -21,7 +21,7 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Typing :: Typed",
 ]
-keywords = ["hand-eye-calibration", "charuco", "dabai", "piper", "robotics"]
+keywords = ["hand-eye-calibration", "charuco", "dabai", "realsense", "piper", "robotics"]
 dependencies = [
     "numpy>=1.23",
 ]
@@ -45,6 +45,7 @@ dev = [
     "types-PyYAML>=6.0",
 ]
 piper = ["python-can>=3.3.4"]
+realsense = ["pyrealsense2>=2.54,<3.0"]
 
 [project.scripts]
 handeye = "handeye_toolkit.cli:main"

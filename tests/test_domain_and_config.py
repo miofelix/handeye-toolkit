@@ -14,6 +14,7 @@ from handeye_toolkit.app import (
     resolve_plan,
     validate_product_config,
     write_config_template,
+    write_product_config,
 )
 from handeye_toolkit.domain import (
     CalibrationMode,
@@ -49,6 +50,54 @@ def test_config_is_strict_and_builds_product_boundaries() -> None:
         mutation(invalid)
         with pytest.raises(ValueError):
             validate_product_config(invalid)
+
+
+def test_config_accepts_d435_and_calibrated_rgb_camera_descriptors(tmp_path: Path) -> None:
+    d435_document = product_document()
+    d435_document["camera"] = {
+        "adapter": "realsense-d435",
+        "source_id": "<camera-serial>",
+        "settings": {"width": 640, "height": 480, "fps": 30, "warmup_frames": 0},
+    }
+    d435 = validate_product_config(d435_document)
+    assert d435.as_dict() == d435_document
+    assert d435.camera_source_id == "<camera-serial>"
+    assert d435.acquisition.camera.adapter == "realsense-d435"
+
+    rgb_document = product_document()
+    rgb_document["camera"] = {
+        "adapter": "opencv-rgb",
+        "source_id": "0",
+        "settings": {
+            "width": 640,
+            "height": 480,
+            "fps": 30.0,
+            "warmup_frames": 0,
+            "backend": "any",
+            "intrinsics": {
+                "fx": 600.0,
+                "fy": 601.0,
+                "cx": 320.0,
+                "cy": 240.0,
+                "distortion_model": "brown-conrady",
+                "distortion_coefficients": [0.0, 0.0, 0.0, 0.0, 0.0],
+            },
+        },
+    }
+    rgb = validate_product_config(rgb_document)
+    assert rgb.as_dict() == rgb_document
+    assert rgb.acquisition.camera.adapter == "opencv-rgb"
+    saved = write_product_config(rgb, tmp_path / "rgb-camera.yaml")
+    assert load_product_config(saved).as_dict() == rgb_document
+
+    invalid_rgb = copy.deepcopy(rgb_document)
+    invalid_camera = invalid_rgb["camera"]
+    assert isinstance(invalid_camera, dict)
+    invalid_settings = invalid_camera["settings"]
+    assert isinstance(invalid_settings, dict)
+    del invalid_settings["intrinsics"]
+    with pytest.raises(ValueError, match="intrinsics"):
+        validate_product_config(invalid_rgb)
 
 
 def test_config_rejects_invalid_dimensions_and_unknown_nested_fields() -> None:

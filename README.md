@@ -1,6 +1,6 @@
 # Handeye Toolkit
 
-Handeye Toolkit 是独立的 DaBai/Piper 手眼标定小工具，提供标定采集、任务恢复、质量检查、本地报告和可离线复算的脱敏交付包。
+Handeye Toolkit 是独立的 Piper 手眼标定小工具，支持 DaBai、Intel RealSense D435 和带已知内参的普通 RGB 相机，提供标定采集、任务恢复、质量检查、本地报告和可离线复算的脱敏交付包。
 
 支持两种安装方式：
 
@@ -21,6 +21,12 @@ Handeye Toolkit 是独立的 DaBai/Piper 手眼标定小工具，提供标定采
 
 ```bash
 python -m pip install '.[runtime,piper]'
+```
+
+D435 需要额外安装 RealSense Python SDK：
+
+```bash
+python -m pip install '.[runtime,piper,realsense]'
 ```
 
 Piper 只读反馈使用 `pyAgxArm`：
@@ -103,6 +109,12 @@ target:
 
 配置使用严格字段校验，未知字段、非有限数值和无效尺寸都会被拒绝。`standard` 是内置质量策略，标定板尺寸必须与实物或证书一致。
 
+原有 `camera.serial_number` 是 DaBai 的兼容简写。D435 和普通 RGB 相机使用通用相机描述，字段为 `camera.adapter`、`camera.source_id` 和 `camera.settings`：
+
+- `realsense-d435`：`source_id` 是设备序列号；`settings` 可设置 `width`、`height`、`fps`、`timeout_ms` 和 `warmup_frames`，彩色流内参由设备 SDK 读取；
+- `opencv-rgb`：`source_id` 是非负设备索引；`settings` 必须包含 `width`、`height` 和 `intrinsics`，还可设置 `fps`、`warmup_frames`、`backend` 和 `fourcc`；
+- `opencv-rgb.settings.intrinsics` 固定包含 `fx`、`fy`、`cx`、`cy`、`distortion_model` 和 `distortion_coefficients`。采集分辨率与内参标定分辨率不一致时会拒绝样本。
+
 ## 任务与交付包
 
 任务目录保存本地采集证据、`session.json`、`result.json` 和 `report.local.html`。样本图像、设备身份和现场路径只保存在本地受控环境中。
@@ -135,8 +147,8 @@ handeye verify handeye-artifact_run_placeholder.zip --json
 - `handeye_toolkit.application`：采集协调器和 `CalibrationRun` 状态机；
 - `handeye_toolkit.composition`：组件注册表和调用方中立的采集装置组合工厂；
 - `handeye_toolkit.artifacts`：交付包导出、严格校验和离线复算；
-- `handeye_toolkit.app`：DaBai/Piper 产品配置及组合入口；
-- `handeye_toolkit.adapters`：DaBai、Piper 只读反馈和文件系统适配器。
+- `handeye_toolkit.app`：Piper 产品配置及组合入口；
+- `handeye_toolkit.adapters`：DaBai、D435、普通 RGB、Piper 只读反馈和文件系统适配器。
 
 `domain`、`ports`、`application` 和基础 `composition` API 不加载 OpenCV、SciPy 或硬件 SDK。调用方中立 API 不内置外部业务配置路径或写回逻辑。
 
@@ -150,7 +162,7 @@ handeye verify handeye-artifact_run_placeholder.zip --json
 - 每类实现以唯一适配器 ID 注册到 `ComponentRegistry`；`ComponentRigFactory` 根据 `AcquisitionDescriptor` 独立解析并组装三个组件；
 - 标定计划中的目标适配器与参数必须和采集描述一致，保证任务恢复、制品导出和离线复算使用同一份固定合同。
 
-本发行版通过 `create_builtin_registry()` 注册 `dabai`、`piper-readonly` 和 `charuco`。新增组件无需修改 `CalibrationRun`、采集协调器或求解器；产品 CLI 仍只接受本仓库固定的 DaBai/Piper 配置合同。
+本发行版通过 `create_builtin_registry()` 注册 `dabai`、`realsense-d435`、`opencv-rgb`、`piper-readonly` 和 `charuco`。新增组件无需修改 `CalibrationRun`、采集协调器或求解器。
 
 ## 开发检查
 
