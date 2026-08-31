@@ -11,6 +11,7 @@ import numpy as np
 
 from ..domain import (
     CameraFrame,
+    ComponentDescriptor,
     DetectionPolicy,
     DetectionQuality,
     JsonValue,
@@ -221,4 +222,17 @@ class CharucoDetector:
         )
 
 
-__all__ = ["CharucoDetector"]
+def create_charuco_detector(
+    descriptor: ComponentDescriptor,
+    policy: DetectionPolicy,
+) -> CharucoDetector:
+    """根据通用目标描述创建 ChArUco 检测器。"""
+
+    if descriptor.adapter != "charuco":
+        raise ValueError("ChArUco 检测器工厂要求 adapter=charuco")
+    if "target" not in descriptor.frames:
+        raise ValueError("ChArUco 目标描述缺少 target 坐标系")
+    return CharucoDetector(descriptor.settings, policy)
+
+
+__all__ = ["CharucoDetector", "create_charuco_detector"]

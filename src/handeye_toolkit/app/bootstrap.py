@@ -5,10 +5,11 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from ..adapters import DabaiPiperRigFactory, FileRunRepository
+from ..adapters import FileRunRepository
 from ..algorithms.solver import OpenCvHandeyeSolver
 from ..application import CalibrationRun
 from ..artifacts import CalibrationArtifactExporter, HtmlReportRenderer
+from ..composition import ComponentRegistry, ComponentRigFactory, create_builtin_registry
 from ..ports import EventSink
 from .config import DEFAULT_CONFIG_PATH, ProductConfig, load_product_config
 
@@ -20,6 +21,7 @@ def create_product_run(
     can_channel: str | None = None,
     output_root: str | Path = "runs",
     event_sink: EventSink | None = None,
+    registry: ComponentRegistry | None = None,
 ) -> CalibrationRun:
     selected = config if config is not None else load_product_config(config_path)
     if can_channel is not None:
@@ -28,7 +30,10 @@ def create_product_run(
     renderer = HtmlReportRenderer()
     return CalibrationRun.create(
         plan=selected.plan,
-        factory=DabaiPiperRigFactory(selected.acquisition),
+        factory=ComponentRigFactory(
+            selected.acquisition,
+            registry if registry is not None else create_builtin_registry(),
+        ),
         repository=repository,
         solver=OpenCvHandeyeSolver(),
         exporter=CalibrationArtifactExporter(renderer),
@@ -42,13 +47,17 @@ def resume_product_run(
     run_ref: str | Path,
     *,
     event_sink: EventSink | None = None,
+    registry: ComponentRegistry | None = None,
 ) -> CalibrationRun:
     repository = FileRunRepository()
     _, record = repository.load(run_ref)
     renderer = HtmlReportRenderer()
     return CalibrationRun.resume(
         run_ref,
-        factory=DabaiPiperRigFactory(record.acquisition),
+        factory=ComponentRigFactory(
+            record.acquisition,
+            registry if registry is not None else create_builtin_registry(),
+        ),
         repository=repository,
         solver=OpenCvHandeyeSolver(),
         exporter=CalibrationArtifactExporter(renderer),

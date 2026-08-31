@@ -124,6 +124,7 @@ import sys
 import handeye_toolkit.domain
 import handeye_toolkit.ports
 import handeye_toolkit.application
+import handeye_toolkit.composition
 for name in ('cv2', 'scipy', 'pyorbbecsdk', 'pyAgxArm'):
     assert name not in sys.modules, name
 """

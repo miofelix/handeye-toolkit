@@ -43,13 +43,14 @@ def resolve_plan(
     profile: str,
     mode: CalibrationMode | str,
     target_parameters: Mapping[str, object],
+    target_adapter: str = "charuco",
 ) -> CalibrationPlan:
     document = _profile_document(profile)
     parameters = dict(target_parameters)
     return CalibrationPlan(
         profile=profile,
         mode=CalibrationMode.parse(mode),
-        target=TargetDescriptor("charuco", parameters),  # type: ignore[arg-type]
+        target=TargetDescriptor(target_adapter, parameters),  # type: ignore[arg-type]
         sampling=SamplingPolicy(**document["sampling"]),
         coverage=CoveragePolicy(**document["coverage"]),
         detection=DetectionPolicy(**document["detection"]),

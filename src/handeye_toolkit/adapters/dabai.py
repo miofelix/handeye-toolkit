@@ -12,7 +12,7 @@ from typing import Any, Mapping, cast
 import cv2
 import numpy as np
 
-from ..domain import CameraFrame, CameraIntrinsics, CaptureStamp
+from ..domain import CameraFrame, CameraIntrinsics, CaptureStamp, ComponentDescriptor
 
 
 @dataclass(frozen=True, slots=True)
@@ -663,6 +663,34 @@ class DaBaiCamera:
         self.close()
 
 
+def create_dabai_camera(descriptor: ComponentDescriptor) -> DaBaiCamera:
+    """把通用组件描述收窄为 DaBai 相机配置。"""
+
+    if descriptor.adapter != "dabai":
+        raise ValueError("DaBai 相机工厂要求 adapter=dabai")
+    try:
+        frame_id = descriptor.frames["camera"]
+    except KeyError as exc:
+        raise ValueError("DaBai 相机描述缺少 camera 坐标系") from exc
+    reserved = {"serial", "serial_number", "frame_id"} & set(descriptor.settings)
+    if reserved:
+        raise ValueError(f"DaBai 相机保留设置不得覆盖：{sorted(reserved)}")
+
+    config = dict(descriptor.settings)
+    config.update(
+        {
+            "name": "DaBai DC1",
+            "serial_number": descriptor.source_id,
+            "frame_id": frame_id,
+        }
+    )
+    config.setdefault("depth_format", "none")
+    config.setdefault("align_to_color", False)
+    config.setdefault("timeout_ms", 5000)
+    config.setdefault("warmup_frames", 30)
+    return DaBaiCamera(config)
+
+
 __all__ = [
     "DaBaiCamera",
     "DaBaiDeviceInfo",
@@ -670,4 +698,5 @@ __all__ = [
     "discover_dabai_devices",
     "ensure_dabai_usb_available",
     "find_dabai_usb_occupants",
+    "create_dabai_camera",
 ]

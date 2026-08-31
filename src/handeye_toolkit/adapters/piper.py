@@ -8,7 +8,7 @@ from typing import Any, Mapping
 
 import numpy as np
 
-from ..domain import CaptureStamp, FlangePose, RigidTransform
+from ..domain import CaptureStamp, ComponentDescriptor, FlangePose, RigidTransform
 
 
 def _message(value: Any) -> Any:
@@ -172,4 +172,44 @@ class PiperFlangeSource:
             self._robot = None
 
 
-__all__ = ["PiperFlangeSource"]
+def create_piper_flange_source(descriptor: ComponentDescriptor) -> PiperFlangeSource:
+    """把通用组件描述收窄为只读 Piper 法兰反馈配置。"""
+
+    if descriptor.adapter != "piper-readonly":
+        raise ValueError("Piper 法兰源工厂要求 adapter=piper-readonly")
+    if descriptor.settings.get("allow_robot_control") is not False:
+        raise ValueError("Piper 法兰源要求 allow_robot_control=false")
+    try:
+        base_frame = descriptor.frames["base"]
+        flange_frame = descriptor.frames["flange"]
+        model = descriptor.settings["model"]
+        firmware = descriptor.settings["firmware_profile"]
+    except KeyError as exc:
+        raise ValueError(f"Piper 法兰源描述缺少字段：{exc.args[0]}") from exc
+    reserved = {
+        "arm_model",
+        "firmware_version",
+        "can_channel",
+        "base_frame",
+        "flange_frame",
+    } & set(descriptor.settings)
+    if reserved:
+        raise ValueError(f"Piper 法兰源保留设置不得覆盖：{sorted(reserved)}")
+
+    config = dict(descriptor.settings)
+    config.update(
+        {
+            "arm_model": model,
+            "firmware_version": firmware,
+            "can_channel": descriptor.source_id,
+            "base_frame": base_frame,
+            "flange_frame": flange_frame,
+            "allow_robot_control": False,
+            "can_mapping_verified": True,
+        }
+    )
+    config.setdefault("can_interface", "socketcan")
+    return PiperFlangeSource(config)
+
+
+__all__ = ["PiperFlangeSource", "create_piper_flange_source"]

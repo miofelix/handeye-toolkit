@@ -133,13 +133,24 @@ handeye verify handeye-artifact_run_placeholder.zip --json
 - `handeye_toolkit.domain`：不可变值对象、坐标变换、计划、任务和结果合同；
 - `handeye_toolkit.ports`：相机、只读法兰源、目标检测器、求解器、仓储、报告和导出协议；
 - `handeye_toolkit.application`：采集协调器和 `CalibrationRun` 状态机；
+- `handeye_toolkit.composition`：组件注册表和调用方中立的采集装置组合工厂；
 - `handeye_toolkit.artifacts`：交付包导出、严格校验和离线复算；
 - `handeye_toolkit.app`：DaBai/Piper 产品配置及组合入口；
 - `handeye_toolkit.adapters`：DaBai、Piper 只读反馈和文件系统适配器。
 
-`domain`、`ports` 和 `application` 不加载 OpenCV、SciPy 或硬件 SDK。调用方中立 API 不内置外部业务配置路径或写回逻辑。
+`domain`、`ports`、`application` 和基础 `composition` API 不加载 OpenCV、SciPy 或硬件 SDK。调用方中立 API 不内置外部业务配置路径或写回逻辑。
 
 常用入口包括 `CalibrationPlan`、`CameraFrame`、`FlangePose`、`TargetDetection`、`CalibrationRun`、`CalibrationResult`、`CalibrationArtifactExporter`、`load_verified_artifact` 和 `recompute_verified_artifact`。
+
+组件扩展合同如下：
+
+- 相机实现 `Camera`，输出带内参和单调时钟采集区间的 `CameraFrame`；
+- 机械臂实现 `ReadOnlyFlangeSource`，只输出 `base <- flange` 的 `FlangePose`，不得暴露控制动作；
+- 标定板实现 `TargetDetector`，输出 `camera <- target` 的 `TargetDetection`、质量指标和身份凭据；
+- 每类实现以唯一适配器 ID 注册到 `ComponentRegistry`；`ComponentRigFactory` 根据 `AcquisitionDescriptor` 独立解析并组装三个组件；
+- 标定计划中的目标适配器与参数必须和采集描述一致，保证任务恢复、制品导出和离线复算使用同一份固定合同。
+
+本发行版通过 `create_builtin_registry()` 注册 `dabai`、`piper-readonly` 和 `charuco`。新增组件无需修改 `CalibrationRun`、采集协调器或求解器；产品 CLI 仍只接受本仓库固定的 DaBai/Piper 配置合同。
 
 ## 开发检查
 

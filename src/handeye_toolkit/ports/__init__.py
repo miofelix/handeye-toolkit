@@ -12,6 +12,8 @@ from ..domain import (
     CalibrationPlan,
     CalibrationResult,
     CameraFrame,
+    ComponentDescriptor,
+    DetectionPolicy,
     FlangePose,
     PoseObservation,
     RunRecord,
@@ -42,6 +44,28 @@ class ReadOnlyFlangeSource(Protocol):
 @runtime_checkable
 class TargetDetector(Protocol):
     def detect(self, frame: CameraFrame) -> TargetDetection: ...
+
+
+class CameraAdapterFactory(Protocol):
+    """根据持久化组件描述创建相机端口。"""
+
+    def __call__(self, descriptor: ComponentDescriptor) -> Camera: ...
+
+
+class FlangeAdapterFactory(Protocol):
+    """根据持久化组件描述创建只读法兰源端口。"""
+
+    def __call__(self, descriptor: ComponentDescriptor) -> ReadOnlyFlangeSource: ...
+
+
+class TargetAdapterFactory(Protocol):
+    """根据标定板描述和检测策略创建检测器端口。"""
+
+    def __call__(
+        self,
+        descriptor: ComponentDescriptor,
+        policy: DetectionPolicy,
+    ) -> TargetDetector: ...
 
 
 @dataclass(slots=True)
@@ -135,10 +159,13 @@ __all__ = [
     "ArtifactExporter",
     "CalibrationSolver",
     "Camera",
+    "CameraAdapterFactory",
     "EventSink",
+    "FlangeAdapterFactory",
     "ReadOnlyFlangeSource",
     "ReportRenderer",
     "RigFactory",
     "RunRepository",
+    "TargetAdapterFactory",
     "TargetDetector",
 ]
