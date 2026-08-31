@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "handeye-toolkit"
+version = "1.0.0"
+description = "独立的 DaBai/Piper 手眼标定工具，提供可恢复采集、质量门禁和可复算脱敏制品"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
+authors = [{name = "miofelix"}]
+classifiers = [
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Typing :: Typed",
+]
+keywords = ["hand-eye-calibration", "charuco", "dabai", "piper", "robotics"]
+dependencies = [
+    "numpy>=1.23",
+]
+
+[project.optional-dependencies]
+runtime = [
+    "scipy>=1.10,<2.0",
+    "opencv-contrib-python==4.11.0.86",
+    "Pillow>=9.0",
+    "PyYAML>=6.0",
+]
+dev = [
+    "build>=1.2",
+    "pytest>=8.0",
+    "scipy>=1.10,<2.0",
+    "opencv-contrib-python==4.11.0.86",
+    "Pillow>=9.0",
+    "PyYAML>=6.0",
+    "mypy>=1.14",
+    "ruff>=0.12",
+    "types-PyYAML>=6.0",
+]
+piper = ["python-can>=3.3.4"]
+
+[project.scripts]
+handeye = "handeye_toolkit.cli:main"
+
+[project.urls]
+Repository = "https://github.com/miofelix/handeye-toolkit"
+Issues = "https://github.com/miofelix/handeye-toolkit/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+handeye_toolkit = ["data/*.yaml", "data/policies/*.json", "py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src/handeye_toolkit"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+no_implicit_optional = true

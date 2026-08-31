@@ -1,0 +1,5 @@
+recursive-include .github *.yml
+recursive-include scripts *.py
+recursive-include src/handeye_toolkit/data *.json *.yaml
+recursive-include tests *.py
+include src/handeye_toolkit/py.typed

@@ -1,0 +1,34 @@
+{
+  "id": "standard",
+  "sampling": {
+    "calibration_target": 20,
+    "validation_target": 5,
+    "candidate_frames": 10,
+    "stability_before_s": 1.0,
+    "stability_after_s": 0.5,
+    "feedback_hz": 20.0,
+    "max_translation_drift_m": 0.0005,
+    "max_rotation_drift_deg": 0.2,
+    "max_capture_interval_s": 0.2
+  },
+  "coverage": {
+    "min_position_span_m": 0.1,
+    "min_rotation_span_deg": 30.0,
+    "min_rotation_change_deg": 5.0,
+    "nonparallel_axis_min_angle_deg": 20.0,
+    "duplicate_translation_m": 0.005,
+    "duplicate_rotation_deg": 3.0
+  },
+  "detection": {
+    "min_corners": 12,
+    "min_area_ratio": 0.05,
+    "max_reprojection_rms_px": 1.0,
+    "min_sharpness": 30.0
+  },
+  "solver": {
+    "translation_gate_m": 0.005,
+    "rotation_gate_deg": 1.0,
+    "bootstrap_iterations": 100,
+    "random_seed": 0
+  }
+}

@@ -1,0 +1,15 @@
+# Handeye Toolkit 产品配置。
+# 尖括号中的值必须按现场设备填写；示例板参数必须与实物或证书一致。
+mode: eye-to-hand
+policy: standard
+camera:
+  serial_number: "<camera-serial>"
+piper:
+  model: piper
+  firmware_profile: v188
+  can_channel: "<can-channel>"
+target:
+  squares: [12, 9]
+  square_size_mm: 15.0
+  marker_size_mm: 11.25
+  dictionary: DICT_5X5_1000
