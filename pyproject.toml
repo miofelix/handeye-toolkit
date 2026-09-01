@@ -21,7 +21,7 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Typing :: Typed",
 ]
-keywords = ["hand-eye-calibration", "charuco", "dabai", "realsense", "piper", "robotics"]
+keywords = ["hand-eye-calibration", "camera-calibration", "multi-camera", "piper", "robotics"]
 dependencies = [
     "numpy>=1.23",
 ]

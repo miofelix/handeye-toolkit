@@ -46,7 +46,11 @@ def product_document() -> dict[str, object]:
     return {
         "mode": "eye-to-hand",
         "policy": "standard",
-        "camera": {"serial_number": "<camera-serial>"},
+        "camera": {
+            "adapter": "dabai",
+            "source_id": "<camera-source>",
+            "settings": {},
+        },
         "piper": {
             "model": "piper",
             "firmware_profile": "v188",

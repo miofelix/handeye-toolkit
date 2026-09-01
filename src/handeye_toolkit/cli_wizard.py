@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import os
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +21,8 @@ _DEFAULT_CONFIG_VALUES = {
     "marker_size_mm": 11.25,
     "dictionary": "DICT_5X5_1000",
 }
+
+_CAMERA_ADAPTERS = ("realsense-d435", "opencv-rgb", "dabai")
 
 
 def _prompt_text(
@@ -43,13 +45,14 @@ def _prompt_choice(
     label: str,
     choices: tuple[str, ...],
     *,
-    default: str,
+    default: str | None,
     input_fn: Input,
     print_fn: Printer,
 ) -> str:
     options = "/".join(choices)
+    suffix = f" [{default}]" if default else ""
     while True:
-        value = input_fn(f"{label}（{options}）[{default}]：").strip().lower() or default
+        value = input_fn(f"{label}（{options}）{suffix}：").strip().lower() or default or ""
         if value in choices:
             return value
         print_fn(f"请输入以下选项之一：{options}。")
@@ -77,12 +80,15 @@ def _prompt_int(
 def _prompt_float(
     label: str,
     *,
-    default: float,
+    default: float | None,
     input_fn: Input,
     print_fn: Printer,
 ) -> float:
+    suffix = f" [{default:g}]" if default is not None else ""
     while True:
-        value = input_fn(f"{label} [{default:g}]：").strip() or str(default)
+        value = input_fn(f"{label}{suffix}：").strip()
+        if not value and default is not None:
+            value = str(default)
         try:
             selected = float(value)
         except ValueError:
@@ -90,6 +96,27 @@ def _prompt_float(
         if selected > 0.0 and math.isfinite(selected):
             return selected
         print_fn(f"{label}必须是正有限数值。")
+
+
+def _prompt_finite_float(
+    label: str,
+    *,
+    default: float | None,
+    input_fn: Input,
+    print_fn: Printer,
+) -> float:
+    suffix = f" [{default:g}]" if default is not None else ""
+    while True:
+        value = input_fn(f"{label}{suffix}：").strip()
+        if not value and default is not None:
+            value = str(default)
+        try:
+            selected = float(value)
+        except ValueError:
+            selected = math.nan
+        if math.isfinite(selected):
+            return selected
+        print_fn(f"{label}必须是有限数值。")
 
 
 def _prompt_path(
@@ -117,6 +144,184 @@ def _prompt_yes_no(label: str, *, default: bool, input_fn: Input) -> bool:
     return value in {"y", "yes"}
 
 
+def _prompt_optional_text(
+    label: str,
+    *,
+    default: str | None,
+    input_fn: Input,
+) -> str | None:
+    suffix = f" [{default}]" if default else ""
+    hint = "留空使用当前值" if default else "留空表示不设置"
+    value = input_fn(f"{label}{suffix}（{hint}）：").strip()
+    return value or default
+
+
+def _prompt_float_list(
+    label: str,
+    *,
+    default: list[float],
+    input_fn: Input,
+    print_fn: Printer,
+) -> list[float]:
+    default_text = ",".join(str(value) for value in default)
+    suffix = f" [{default_text}]" if default_text else ""
+    hint = "留空使用当前值" if default_text else "留空表示无畸变参数"
+    while True:
+        value = input_fn(f"{label}{suffix}（逗号分隔，{hint}）：").strip()
+        if not value:
+            return list(default)
+        try:
+            selected = [float(item.strip()) for item in value.split(",")]
+        except ValueError:
+            selected = []
+        if selected and all(math.isfinite(item) for item in selected):
+            return selected
+        print_fn(f"{label}必须是逗号分隔的有限数值。")
+
+
+def _collect_camera_settings(
+    adapter: str,
+    previous: Mapping[str, Any],
+    *,
+    input_fn: Input,
+    print_fn: Printer,
+) -> dict[str, Any]:
+    if adapter == "dabai":
+        return dict(previous)
+    if adapter == "realsense-d435":
+        return {
+            "width": _prompt_int(
+                "彩色图像宽度",
+                default=int(previous.get("width", 1280)),
+                minimum=1,
+                input_fn=input_fn,
+                print_fn=print_fn,
+            ),
+            "height": _prompt_int(
+                "彩色图像高度",
+                default=int(previous.get("height", 720)),
+                minimum=1,
+                input_fn=input_fn,
+                print_fn=print_fn,
+            ),
+            "fps": _prompt_int(
+                "彩色流帧率",
+                default=int(previous.get("fps", 30)),
+                minimum=1,
+                input_fn=input_fn,
+                print_fn=print_fn,
+            ),
+            "timeout_ms": _prompt_int(
+                "采集超时（ms）",
+                default=int(previous.get("timeout_ms", 5000)),
+                minimum=1,
+                input_fn=input_fn,
+                print_fn=print_fn,
+            ),
+            "warmup_frames": _prompt_int(
+                "预热帧数",
+                default=int(previous.get("warmup_frames", 30)),
+                minimum=0,
+                input_fn=input_fn,
+                print_fn=print_fn,
+            ),
+        }
+
+    intrinsics_value = previous.get("intrinsics", {})
+    intrinsics = dict(intrinsics_value) if isinstance(intrinsics_value, Mapping) else {}
+    coefficients_value = intrinsics.get("distortion_coefficients", [])
+    coefficients = (
+        [float(value) for value in coefficients_value]
+        if isinstance(coefficients_value, (list, tuple))
+        else []
+    )
+    settings: dict[str, Any] = {
+        "width": _prompt_int(
+            "标定图像宽度",
+            default=int(previous.get("width", 1280)),
+            minimum=1,
+            input_fn=input_fn,
+            print_fn=print_fn,
+        ),
+        "height": _prompt_int(
+            "标定图像高度",
+            default=int(previous.get("height", 720)),
+            minimum=1,
+            input_fn=input_fn,
+            print_fn=print_fn,
+        ),
+        "fps": _prompt_float(
+            "采集帧率",
+            default=float(previous.get("fps", 30.0)),
+            input_fn=input_fn,
+            print_fn=print_fn,
+        ),
+        "warmup_frames": _prompt_int(
+            "预热帧数",
+            default=int(previous.get("warmup_frames", 10)),
+            minimum=0,
+            input_fn=input_fn,
+            print_fn=print_fn,
+        ),
+        "backend": _prompt_choice(
+            "OpenCV 后端",
+            ("any", "v4l2", "avfoundation", "dshow", "msmf", "gstreamer"),
+            default=str(previous.get("backend", "any")),
+            input_fn=input_fn,
+            print_fn=print_fn,
+        ),
+        "intrinsics": {
+            "fx": _prompt_float(
+                "相机内参 fx",
+                default=None if intrinsics.get("fx") is None else float(intrinsics["fx"]),
+                input_fn=input_fn,
+                print_fn=print_fn,
+            ),
+            "fy": _prompt_float(
+                "相机内参 fy",
+                default=None if intrinsics.get("fy") is None else float(intrinsics["fy"]),
+                input_fn=input_fn,
+                print_fn=print_fn,
+            ),
+            "cx": _prompt_finite_float(
+                "相机内参 cx",
+                default=None if intrinsics.get("cx") is None else float(intrinsics["cx"]),
+                input_fn=input_fn,
+                print_fn=print_fn,
+            ),
+            "cy": _prompt_finite_float(
+                "相机内参 cy",
+                default=None if intrinsics.get("cy") is None else float(intrinsics["cy"]),
+                input_fn=input_fn,
+                print_fn=print_fn,
+            ),
+            "distortion_model": _prompt_optional_text(
+                "畸变模型",
+                default=(
+                    None
+                    if intrinsics.get("distortion_model") is None
+                    else str(intrinsics["distortion_model"])
+                ),
+                input_fn=input_fn,
+            ),
+            "distortion_coefficients": _prompt_float_list(
+                "畸变参数",
+                default=coefficients,
+                input_fn=input_fn,
+                print_fn=print_fn,
+            ),
+        },
+    }
+    fourcc = _prompt_optional_text(
+        "FourCC（4 个 ASCII 字符）",
+        default=None if previous.get("fourcc") is None else str(previous["fourcc"]),
+        input_fn=input_fn,
+    )
+    if fourcc is not None:
+        settings["fourcc"] = fourcc
+    return settings
+
+
 def _config_summary(config: Any, *, effective_channel: str | None = None) -> str:
     document = config.as_dict()
     camera = document["camera"]
@@ -125,10 +330,7 @@ def _config_summary(config: Any, *, effective_channel: str | None = None) -> str
     channel = str(piper["can_channel"])
     if effective_channel is not None and effective_channel != channel:
         channel = f"{channel}（本次任务覆盖为 {effective_channel}）"
-    if "serial_number" in camera:
-        camera_summary = f"DaBai 相机序列号：{camera['serial_number']}"
-    else:
-        camera_summary = f"相机适配器：{camera['adapter']}；来源：{camera['source_id']}"
+    camera_summary = f"相机适配器：{camera['adapter']}；来源：{camera['source_id']}"
     return "\n".join(
         (
             "配置摘要：",
@@ -151,7 +353,7 @@ def collect_product_config(
 ) -> Any:
     """交互收集并严格校验产品配置。"""
 
-    from .app.config import validate_product_config
+    from .app.config import SUPPORTED_CAMERA_ADAPTERS, validate_product_config
 
     previous = existing.as_dict() if existing is not None else {}
     camera = previous.get("camera", {})
@@ -162,6 +364,10 @@ def collect_product_config(
         squares = _DEFAULT_CONFIG_VALUES["squares"]
 
     print_fn("请填写配置。尖括号值必须替换为现场设备信息。")
+    print_fn(
+        "内置相机适配器：realsense-d435（Intel RealSense D435）、"
+        "opencv-rgb（普通 RGB 相机）、dabai（DaBai DC1）。"
+    )
     mode = _prompt_choice(
         "标定模式",
         ("eye-to-hand", "eye-in-hand"),
@@ -169,9 +375,33 @@ def collect_product_config(
         input_fn=input_fn,
         print_fn=print_fn,
     )
-    serial = _prompt_text(
-        "DaBai 相机序列号",
-        default=camera.get("serial_number"),
+    previous_adapter = str(camera.get("adapter", ""))
+    adapter = _prompt_choice(
+        "相机适配器",
+        _CAMERA_ADAPTERS,
+        default=previous_adapter if previous_adapter in SUPPORTED_CAMERA_ADAPTERS else None,
+        input_fn=input_fn,
+        print_fn=print_fn,
+    )
+    source_id = _prompt_text(
+        "相机来源 ID（设备序列号或设备索引）",
+        default=(
+            str(camera["source_id"])
+            if camera.get("adapter") == adapter and camera.get("source_id") is not None
+            else ("0" if adapter == "opencv-rgb" else None)
+        ),
+        input_fn=input_fn,
+        print_fn=print_fn,
+    )
+    previous_settings_value = camera.get("settings", {})
+    previous_settings = (
+        previous_settings_value
+        if camera.get("adapter") == adapter and isinstance(previous_settings_value, Mapping)
+        else {}
+    )
+    camera_settings = _collect_camera_settings(
+        adapter,
+        previous_settings,
         input_fn=input_fn,
         print_fn=print_fn,
     )
@@ -237,7 +467,11 @@ def collect_product_config(
     document = {
         "mode": mode,
         "policy": "standard",
-        "camera": {"serial_number": serial},
+        "camera": {
+            "adapter": adapter,
+            "source_id": source_id,
+            "settings": camera_settings,
+        },
         "piper": {
             "model": model,
             "firmware_profile": firmware,

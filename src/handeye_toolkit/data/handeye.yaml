@@ -1,9 +1,12 @@
-# Handeye Toolkit 产品配置。
-# 尖括号中的值必须按现场设备填写；示例板参数必须与实物或证书一致。
+# Handeye Toolkit 多相机产品配置。
+# adapter 可填写 realsense-d435、opencv-rgb 或 dabai。
+# 尖括号中的值和 settings 必须按相机适配器及现场设备填写；板参数必须与实物或证书一致。
 mode: eye-to-hand
 policy: standard
 camera:
-  serial_number: "<camera-serial>"
+  adapter: "<camera-adapter>"
+  source_id: "<camera-source>"
+  settings: {}
 piper:
   model: piper
   firmware_profile: v188

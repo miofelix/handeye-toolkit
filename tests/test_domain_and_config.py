@@ -10,6 +10,7 @@ from conftest import DUMMY_HASHES, TARGET_PARAMETERS, product_document, transfor
 
 from handeye_toolkit.app import (
     STANDARD_PROFILE,
+    CameraConfig,
     load_product_config,
     resolve_plan,
     validate_product_config,
@@ -35,6 +36,7 @@ def test_config_is_strict_and_builds_product_boundaries() -> None:
     config = validate_product_config(document)
 
     assert config.as_dict() == document
+    assert config.camera == CameraConfig("dabai", "<camera-source>")
     assert config.policy == STANDARD_PROFILE == "standard"
     assert config.plan.mode is CalibrationMode.EYE_TO_HAND
     assert config.acquisition.camera.adapter == "dabai"
@@ -62,6 +64,7 @@ def test_config_accepts_d435_and_calibrated_rgb_camera_descriptors(tmp_path: Pat
     d435 = validate_product_config(d435_document)
     assert d435.as_dict() == d435_document
     assert d435.camera_source_id == "<camera-serial>"
+    assert d435.camera.adapter == "realsense-d435"
     assert d435.acquisition.camera.adapter == "realsense-d435"
 
     rgb_document = product_document()
@@ -100,6 +103,19 @@ def test_config_accepts_d435_and_calibrated_rgb_camera_descriptors(tmp_path: Pat
         validate_product_config(invalid_rgb)
 
 
+def test_legacy_dabai_camera_shorthand_is_read_and_normalized() -> None:
+    legacy = product_document()
+    legacy["camera"] = {"serial_number": "<camera-serial>"}
+
+    config = validate_product_config(legacy)
+
+    assert config.as_dict()["camera"] == {
+        "adapter": "dabai",
+        "source_id": "<camera-serial>",
+        "settings": {},
+    }
+
+
 def test_config_rejects_invalid_dimensions_and_unknown_nested_fields() -> None:
     document = product_document()
     document["target"] = {
@@ -126,9 +142,11 @@ def test_yaml_template_never_overwrites_without_force(tmp_path: Path) -> None:
     text = selected.read_text(encoding="utf-8")
     assert "schema_version" not in text
     assert "policy: standard" in text
-    assert '"<camera-serial>"' in text
+    assert '"<camera-adapter>"' in text
+    assert '"<camera-source>"' in text
     assert '"<can-channel>"' in text
-    assert load_product_config(selected).as_dict() == product_document()
+    with pytest.raises(ValueError, match="camera.adapter"):
+        load_product_config(selected)
 
     with pytest.raises(FileExistsError):
         write_config_template(selected)

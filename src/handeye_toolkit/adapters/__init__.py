@@ -1,6 +1,5 @@
-"""本发行版提供的基础设施适配器。"""
+"""本发行版提供的相机、法兰反馈与存储适配器。"""
 
-from .dabai_piper import DabaiPiperRigFactory
 from .filesystem import FileRunRepository
 
-__all__ = ["DabaiPiperRigFactory", "FileRunRepository"]
+__all__ = ["FileRunRepository"]

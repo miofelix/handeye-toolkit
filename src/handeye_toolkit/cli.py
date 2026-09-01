@@ -85,7 +85,7 @@ def _add_root_wizard_arguments(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = ChineseArgumentParser(
         prog="handeye",
-        description="独立的 DaBai/Piper 手眼标定工具；Piper 仅用于读取状态和法兰反馈。",
+        description="多相机/Piper 手眼标定工具；Piper 仅用于读取状态和法兰反馈。",
     )
     _add_root_wizard_arguments(parser)
     commands = parser.add_subparsers(dest="command", metavar="命令")
@@ -147,7 +147,7 @@ def run_cli(
         controller.run.reopen()
 
     print_fn(
-        "安全边界：程序只读取 DaBai 图像和 Piper 状态/法兰反馈；"
+        "安全边界：程序只读取相机图像和 Piper 状态/法兰反馈；"
         "不会发送运动、使能、失能、复位、急停或夹爪命令。"
     )
     if input_fn("确认机械臂由现场人员手动移动，并接受上述边界？[y/N]：").strip().lower() != "y":

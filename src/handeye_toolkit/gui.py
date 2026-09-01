@@ -29,7 +29,7 @@ class CalibrationGui:
 
         outer = ttk.Frame(root, padding=16)
         outer.pack(fill="both", expand=True)
-        ttk.Label(outer, text="DaBai / Piper 手眼标定", font=("TkDefaultFont", 18, "bold")).pack(
+        ttk.Label(outer, text="多相机 / Piper 手眼标定", font=("TkDefaultFont", 18, "bold")).pack(
             anchor="w"
         )
         self.status = tk.StringVar(value="请先阅读安全边界并连接只读采集源。")
@@ -96,7 +96,7 @@ class CalibrationGui:
     def _connect(self) -> None:
         accepted = messagebox.askyesno(
             "安全确认",
-            "程序只读取 DaBai 图像和 Piper 状态/法兰反馈，不发送运动、使能、失能、"
+            "程序只读取相机图像和 Piper 状态/法兰反馈，不发送运动、使能、失能、"
             "复位、急停或夹爪命令。机械臂必须由现场人员手动移动。是否确认？",
         )
         if accepted:

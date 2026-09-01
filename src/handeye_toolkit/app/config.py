@@ -1,4 +1,4 @@
-"""Piper 手眼标定产品自身的严格 YAML 配置。"""
+"""多相机手眼标定产品自身的严格 YAML 配置。"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from ..domain import AcquisitionDescriptor, CalibrationMode, ComponentDescriptor
 from .policy import STANDARD_PROFILE, resolve_plan
 
 DEFAULT_CONFIG_PATH = Path("configs/handeye.yaml")
-SUPPORTED_CAMERA_ADAPTERS = {"dabai", "opencv-rgb", "realsense-d435"}
+SUPPORTED_CAMERA_ADAPTERS = frozenset({"dabai", "opencv-rgb", "realsense-d435"})
 
 
 def _exact(value: Mapping[str, object], expected: set[str], label: str) -> None:
@@ -50,10 +50,62 @@ def _positive(value: object, label: str) -> float:
 
 
 @dataclass(frozen=True, slots=True)
+class CameraConfig:
+    """调用方中立的相机适配器配置。"""
+
+    adapter: str
+    source_id: str
+    settings: Mapping[str, JsonValue] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        adapter = _text(self.adapter, "camera.adapter")
+        if adapter not in SUPPORTED_CAMERA_ADAPTERS:
+            raise ValueError(f"camera.adapter 无效：{adapter}")
+        descriptor = ComponentDescriptor(
+            adapter,
+            _text(self.source_id, "camera.source_id"),
+            {"camera": "camera"},
+            self.settings,
+        )
+        if adapter == "dabai":
+            from ..adapters.dabai import create_dabai_camera
+
+            create_dabai_camera(descriptor)
+        elif adapter == "realsense-d435":
+            from ..adapters.realsense import create_realsense_d435_camera
+
+            create_realsense_d435_camera(descriptor)
+        elif adapter == "opencv-rgb":
+            from ..adapters.opencv_rgb import create_opencv_rgb_camera
+
+            create_opencv_rgb_camera(descriptor)
+        object.__setattr__(self, "adapter", descriptor.adapter)
+        object.__setattr__(self, "source_id", descriptor.source_id)
+        object.__setattr__(self, "settings", descriptor.settings)
+
+    @property
+    def component(self) -> ComponentDescriptor:
+        return ComponentDescriptor(
+            self.adapter,
+            self.source_id,
+            {"camera": "camera"},
+            self.settings,
+        )
+
+    def as_dict(self) -> dict[str, JsonValue]:
+        descriptor = self.component.as_dict()
+        return {
+            "adapter": self.adapter,
+            "source_id": self.source_id,
+            "settings": descriptor["settings"],
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ProductConfig:
     mode: CalibrationMode
     policy: str
-    camera_serial_number: str
+    camera: CameraConfig
     piper_model: str
     piper_firmware_profile: str
     piper_can_channel: str
@@ -61,37 +113,13 @@ class ProductConfig:
     square_size_mm: float
     marker_size_mm: float
     dictionary: str
-    camera_adapter: str = "dabai"
-    camera_settings: Mapping[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "mode", CalibrationMode.parse(self.mode))
         if self.policy != STANDARD_PROFILE:
             raise ValueError(f"policy 必须为 {STANDARD_PROFILE}")
-        object.__setattr__(
-            self,
-            "camera_serial_number",
-            _text(self.camera_serial_number, "camera_serial_number"),
-        )
-        adapter = _text(self.camera_adapter, "camera_adapter")
-        if adapter not in SUPPORTED_CAMERA_ADAPTERS:
-            raise ValueError(f"camera_adapter 无效：{adapter}")
-        component = ComponentDescriptor(
-            adapter,
-            self.camera_serial_number,
-            {"camera": "camera"},
-            self.camera_settings,
-        )
-        if adapter == "realsense-d435":
-            from ..adapters.realsense import create_realsense_d435_camera
-
-            create_realsense_d435_camera(component)
-        elif adapter == "opencv-rgb":
-            from ..adapters.opencv_rgb import create_opencv_rgb_camera
-
-            create_opencv_rgb_camera(component)
-        object.__setattr__(self, "camera_adapter", adapter)
-        object.__setattr__(self, "camera_settings", component.settings)
+        if not isinstance(self.camera, CameraConfig):
+            raise TypeError("camera 必须是 CameraConfig")
         object.__setattr__(
             self,
             "piper_can_channel",
@@ -128,9 +156,27 @@ class ProductConfig:
 
     @property
     def camera_source_id(self) -> str:
-        """返回通用相机来源 ID；保留旧字段名以兼容已有调用方。"""
+        """返回相机适配器使用的来源 ID。"""
 
-        return self.camera_serial_number
+        return self.camera.source_id
+
+    @property
+    def camera_adapter(self) -> str:
+        """兼容旧调用方；新代码应使用 ``camera.adapter``。"""
+
+        return self.camera.adapter
+
+    @property
+    def camera_settings(self) -> Mapping[str, JsonValue]:
+        """兼容旧调用方；新代码应使用 ``camera.settings``。"""
+
+        return self.camera.settings
+
+    @property
+    def camera_serial_number(self) -> str:
+        """兼容旧调用方；来源 ID 不一定是设备序列号。"""
+
+        return self.camera.source_id
 
     @property
     def plan(self):
@@ -142,16 +188,8 @@ class ProductConfig:
 
     @property
     def acquisition(self) -> AcquisitionDescriptor:
-        camera_settings = dict(self.camera_settings)
-        if self.camera_adapter == "dabai":
-            camera_settings.setdefault("stream_profile", "default-color")
         return AcquisitionDescriptor(
-            camera=ComponentDescriptor(
-                self.camera_adapter,
-                self.camera_serial_number,
-                {"camera": "camera"},
-                camera_settings,
-            ),
+            camera=self.camera.component,
             flange=ComponentDescriptor(
                 "piper-readonly",
                 self.piper_can_channel,
@@ -172,24 +210,10 @@ class ProductConfig:
         )
 
     def as_dict(self) -> dict[str, JsonValue]:
-        if self.camera_adapter == "dabai" and not self.camera_settings:
-            camera: dict[str, JsonValue] = {"serial_number": self.camera_serial_number}
-        else:
-            settings = ComponentDescriptor(
-                self.camera_adapter,
-                self.camera_serial_number,
-                {"camera": "camera"},
-                self.camera_settings,
-            ).as_dict()["settings"]
-            camera = {
-                "adapter": self.camera_adapter,
-                "source_id": self.camera_serial_number,
-                "settings": settings,
-            }
         return {
             "mode": self.mode.value,
             "policy": self.policy,
-            "camera": camera,
+            "camera": self.camera.as_dict(),
             "piper": {
                 "model": self.piper_model,
                 "firmware_profile": self.piper_firmware_profile,
@@ -218,9 +242,10 @@ def validate_product_config(value: Mapping[str, object]) -> ProductConfig:
 
     camera = _mapping(document["camera"], "config.camera")
     if set(camera) == {"serial_number"}:
-        camera_adapter = "dabai"
-        camera_source_id = _text(camera["serial_number"], "config.camera.serial_number")
-        camera_settings: dict[str, JsonValue] = {}
+        camera_config = CameraConfig(
+            "dabai",
+            _text(camera["serial_number"], "config.camera.serial_number"),
+        )
     else:
         _exact(camera, {"adapter", "source_id", "settings"}, "config.camera")
         camera_adapter = _text(camera["adapter"], "config.camera.adapter")
@@ -229,6 +254,7 @@ def validate_product_config(value: Mapping[str, object]) -> ProductConfig:
         camera_source_id = _text(camera["source_id"], "config.camera.source_id")
         raw_camera_settings = _mapping(camera["settings"], "config.camera.settings")
         camera_settings = cast(dict[str, JsonValue], raw_camera_settings)
+        camera_config = CameraConfig(camera_adapter, camera_source_id, camera_settings)
 
     piper = _mapping(document["piper"], "config.piper")
     _exact(piper, {"model", "firmware_profile", "can_channel"}, "config.piper")
@@ -257,18 +283,16 @@ def validate_product_config(value: Mapping[str, object]) -> ProductConfig:
     dictionary = _text(target["dictionary"], "config.target.dictionary")
 
     result = ProductConfig(
-        mode,
-        policy,
-        camera_source_id,
-        model,
-        firmware,
-        channel,
-        (int(squares[0]), int(squares[1])),
-        square_size,
-        marker_size,
-        dictionary,
-        camera_adapter,
-        camera_settings,
+        mode=mode,
+        policy=policy,
+        camera=camera_config,
+        piper_model=model,
+        piper_firmware_profile=firmware,
+        piper_can_channel=channel,
+        squares=(int(squares[0]), int(squares[1])),
+        square_size_mm=square_size,
+        marker_size_mm=marker_size,
+        dictionary=dictionary,
     )
     result.plan
     return result
@@ -345,6 +369,7 @@ def write_config_template(
 
 
 __all__ = [
+    "CameraConfig",
     "DEFAULT_CONFIG_PATH",
     "ProductConfig",
     "SUPPORTED_CAMERA_ADAPTERS",

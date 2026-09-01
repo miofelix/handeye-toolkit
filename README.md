@@ -1,6 +1,6 @@
 # Handeye Toolkit
 
-Handeye Toolkit 是独立的 Piper 手眼标定小工具，支持 DaBai、Intel RealSense D435 和带已知内参的普通 RGB 相机，提供标定采集、任务恢复、质量检查、本地报告和可离线复算的脱敏交付包。
+Handeye Toolkit 是面向多种相机的独立 Piper 手眼标定工具。相机通过统一适配器合同接入；内置支持 Intel RealSense D435、带已知内参的普通 RGB 相机和 DaBai DC1。工具提供标定采集、任务恢复、质量检查、本地报告和可离线复算的脱敏交付包。
 
 支持两种安装方式：
 
@@ -11,48 +11,39 @@ Handeye Toolkit 是独立的 Piper 手眼标定小工具，支持 DaBai、Intel 
 
 ## 安全边界
 
-工具对 Piper 只执行连接、状态读取、法兰位姿读取和断开。不会发送运动、使能、失能、复位、急停或夹爪控制命令。
+工具只读取相机图像以及 Piper 状态和法兰反馈。Piper 适配器不会发送运动、使能、失能、复位、急停或夹爪控制命令。
 
-采集时必须由现场人员确认标定板安装牢固，并手动移动机械臂。运行前应核对 CAN 通道。
+采集时必须由现场人员确认标定板安装牢固并手动移动机械臂。运行前应核对 CAN 通道。
+
+## 内置相机适配器
+
+所有相机在产品配置中使用相同的 `adapter`、`source_id` 和 `settings` 合同：
+
+| 相机 | `adapter` | `source_id` | 内参与采集设置 |
+| --- | --- | --- | --- |
+| Intel RealSense D435 | `realsense-d435` | 设备序列号 | 彩色内参由 RealSense SDK 读取；可设置宽、高、帧率、超时和预热帧数 |
+| 普通 RGB 相机 | `opencv-rgb` | 非负 OpenCV 设备索引 | 必须提供与固定采集分辨率对应的完整内参；可设置帧率、后端、FourCC 和预热帧数 |
+| DaBai DC1 | `dabai` | 设备序列号 | 彩色内参由 Orbbec SDK 读取；可使用默认彩色流或适配器支持的流设置 |
+
+普通 RGB 相机的采集分辨率与内参标定分辨率不一致时会拒绝采集。D435 和 DaBai 的设备选择及专属 SDK 规则只存在于各自适配器内，不进入产品层合同。
 
 ## 安装
 
-在运行工具的 Python 环境中安装项目和依赖：
+在运行工具的 Python 环境中安装项目、运行时依赖和 Piper 只读反馈依赖：
 
 ```bash
 python -m pip install '.[runtime,piper]'
-```
-
-D435 需要额外安装 RealSense Python SDK：
-
-```bash
-python -m pip install '.[runtime,piper,realsense]'
-```
-
-Piper 只读反馈使用 `pyAgxArm`：
-
-```bash
 python -m pip install \
   'git+https://github.com/agilexrobotics/pyAgxArm.git@8cd90f9106219a156c3c0d7e58ee36d838a89baf'
 ```
 
-DaBai DC1 使用 `pyorbbecsdk v1.3.2`。Ubuntu 上可按以下方式构建并安装：
+根据相机适配器安装对应 SDK：
 
-```bash
-sudo apt-get update
-sudo apt-get install -y build-essential cmake python3-dev python3-pip python3-venv
-git clone --depth 1 --branch v1.3.2 \
-  https://github.com/orbbec/pyorbbecsdk.git
-cd pyorbbecsdk
-python -m pip install 'pybind11-global==2.11.0' wheel
-cmake -S . -B build -Dpybind11_DIR="$(pybind11-config --cmakedir)"
-cmake --build build --parallel
-cmake --install build
-python setup.py bdist_wheel
-python -m pip install dist/*.whl
-```
+- `realsense-d435`：使用 `python -m pip install '.[runtime,piper,realsense]'` 安装声明的 RealSense Python 依赖；
+- `opencv-rgb`：OpenCV 已包含在 `runtime` 可选依赖中；
+- `dabai`：按上游说明构建并安装 `pyorbbecsdk v1.3.2`，并安装对应 udev 规则。
 
-首次连接前，需要按上游说明安装并重新加载 udev 规则。仓库不复制或打包硬件 SDK；许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+仓库不复制或打包硬件 SDK；许可证和版本信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 命令行
 
@@ -69,9 +60,8 @@ q) 退出
 也可以直接使用命令和参数：
 
 ```text
-handeye [--config PATH | --resume RUN_DIR]
-        [--ui auto|cli|gui] [--can-channel CAN_CHANNEL]
-        [--output-root PATH] [--artifact-output PATH]
+handeye [--config PATH | --resume RUN_DIR] [--ui auto|cli|gui]
+        [--can-channel CAN_CHANNEL] [--output-root PATH] [--artifact-output PATH]
 handeye setup [--output PATH] [--force]
 handeye resume RUN_DIR [--ui auto|cli|gui] [--artifact-output PATH]
 handeye verify ARTIFACT.zip [--recompute] [--json]
@@ -81,21 +71,23 @@ handeye verify ARTIFACT.zip [--recompute] [--json]
 
 有桌面环境时可以使用图形界面；`--ui cli` 和 `--ui gui` 可强制选择，`--ui auto` 自动判断。CLI 与 GUI 共用同一个 `CalibrationController` 和 `CalibrationRun` 状态机。
 
-## 配置
+## 配置合同
 
-生成占位配置：
+生成不带设备身份的占位配置：
 
 ```bash
 handeye setup --output configs/handeye.yaml
 ```
 
-配置合同如下：
+相机配置统一使用以下结构：
 
 ```yaml
 mode: eye-to-hand
 policy: standard
 camera:
-  serial_number: "<camera-serial>"
+  adapter: "<camera-adapter>"
+  source_id: "<camera-source>"
+  settings: {}
 piper:
   model: piper
   firmware_profile: v188
@@ -107,13 +99,17 @@ target:
   dictionary: DICT_5X5_1000
 ```
 
-配置使用严格字段校验，未知字段、非有限数值和无效尺寸都会被拒绝。`standard` 是内置质量策略，标定板尺寸必须与实物或证书一致。
+占位配置中的 `camera.adapter`、`camera.source_id`、`camera.settings` 和 CAN 通道必须按现场设备填写。配置使用严格字段校验，未知字段、非有限数值和无效尺寸都会被拒绝。`standard` 是内置质量策略，标定板尺寸必须与实物或证书一致。
 
-原有 `camera.serial_number` 是 DaBai 的兼容简写。D435 和普通 RGB 相机使用通用相机描述，字段为 `camera.adapter`、`camera.source_id` 和 `camera.settings`：
+各相机的 `settings` 合同如下：
 
-- `realsense-d435`：`source_id` 是设备序列号；`settings` 可设置 `width`、`height`、`fps`、`timeout_ms` 和 `warmup_frames`，彩色流内参由设备 SDK 读取；
-- `opencv-rgb`：`source_id` 是非负设备索引；`settings` 必须包含 `width`、`height` 和 `intrinsics`，还可设置 `fps`、`warmup_frames`、`backend` 和 `fourcc`；
-- `opencv-rgb.settings.intrinsics` 固定包含 `fx`、`fy`、`cx`、`cy`、`distortion_model` 和 `distortion_coefficients`。采集分辨率与内参标定分辨率不一致时会拒绝样本。
+- `realsense-d435`：可包含 `width`、`height`、`fps`、`timeout_ms` 和 `warmup_frames`；
+- `opencv-rgb`：必须包含 `width`、`height` 和 `intrinsics`，可包含 `fps`、`warmup_frames`、`backend` 和 `fourcc`；
+- `dabai`：设置为空时使用 SDK 默认彩色流，也可填写适配器公开支持的流参数。
+
+`opencv-rgb.settings.intrinsics` 固定包含 `fx`、`fy`、`cx`、`cy`、`distortion_model` 和 `distortion_coefficients`。
+
+旧版 DaBai 配置的 `camera.serial_number` 简写仍可读取，但加载后会规范化为统一相机合同；新配置和写出结果不再使用该简写。
 
 ## 任务与交付包
 
@@ -128,9 +124,7 @@ evidence.json
 report.html
 ```
 
-交付包不包含原始图像、相机序列号、CAN 通道、本地路径或硬件 SDK 元数据。加载时会检查成员白名单、路径安全、压缩与大小上限、媒体类型、SHA-256 和跨文件语义一致性。
-
-校验或离线复算交付包：
+交付包不包含原始图像、相机序列号、CAN 通道或硬件 SDK 元数据。加载时会检查成员白名单、路径安全、压缩与大小上限、媒体类型、SHA-256 和跨文件引用。
 
 ```bash
 handeye verify handeye-artifact_run_placeholder.zip
@@ -140,36 +134,28 @@ handeye verify handeye-artifact_run_placeholder.zip --json
 
 ## Python API
 
-公共 API 按职责组织：
+公共模块职责：
 
 - `handeye_toolkit.domain`：不可变值对象、坐标变换、计划、任务和结果合同；
 - `handeye_toolkit.ports`：相机、只读法兰源、目标检测器、求解器、仓储、报告和导出协议；
 - `handeye_toolkit.application`：采集协调器和 `CalibrationRun` 状态机；
 - `handeye_toolkit.composition`：组件注册表和调用方中立的采集装置组合工厂；
 - `handeye_toolkit.artifacts`：交付包导出、严格校验和离线复算；
-- `handeye_toolkit.app`：Piper 产品配置及组合入口；
-- `handeye_toolkit.adapters`：DaBai、D435、普通 RGB、Piper 只读反馈和文件系统适配器。
+- `handeye_toolkit.app`：统一产品配置、质量策略和启动组合；
+- `handeye_toolkit.adapters`：内置相机、Piper 只读反馈和文件系统适配器。
 
-`domain`、`ports`、`application` 和基础 `composition` API 不加载 OpenCV、SciPy 或硬件 SDK。调用方中立 API 不内置外部业务配置路径或写回逻辑。
+领域 API 不导入 OpenCV、SciPy 或硬件 SDK。调用方中立 API 以 `CalibrationPlan`、`CameraFrame`、`FlangePose`、`TargetDetection`、`CalibrationRun`、`CalibrationResult`、`CalibrationArtifactExporter` 和 `load_verified_artifact` 为主。
 
-常用入口包括 `CalibrationPlan`、`CameraFrame`、`FlangePose`、`TargetDetection`、`CalibrationRun`、`CalibrationResult`、`CalibrationArtifactExporter`、`load_verified_artifact` 和 `recompute_verified_artifact`。
+扩展相机时，实现 `Camera` 端口，并提供接收 `ComponentDescriptor` 的适配器工厂；随后将工厂注册到 `ComponentRegistry`。产品层、采集协调器和求解器只依赖统一描述及端口，不依赖具体相机型号。
 
-组件扩展合同如下：
+本发行版通过 `create_builtin_registry()` 注册 `realsense-d435`、`opencv-rgb`、`dabai`、`piper-readonly` 和 `charuco`。新增组件无需修改 `CalibrationRun`、采集协调器或求解器。
 
-- 相机实现 `Camera`，输出带内参和单调时钟采集区间的 `CameraFrame`；
-- 机械臂实现 `ReadOnlyFlangeSource`，只输出 `base <- flange` 的 `FlangePose`，不得暴露控制动作；
-- 标定板实现 `TargetDetector`，输出 `camera <- target` 的 `TargetDetection`、质量指标和身份凭据；
-- 每类实现以唯一适配器 ID 注册到 `ComponentRegistry`；`ComponentRigFactory` 根据 `AcquisitionDescriptor` 独立解析并组装三个组件；
-- 标定计划中的目标适配器与参数必须和采集描述一致，保证任务恢复、制品导出和离线复算使用同一份固定合同。
-
-本发行版通过 `create_builtin_registry()` 注册 `dabai`、`realsense-d435`、`opencv-rgb`、`piper-readonly` 和 `charuco`。新增组件无需修改 `CalibrationRun`、采集协调器或求解器。
-
-## 开发检查
+## 开发验证
 
 ```bash
+python -m pytest
 python -m ruff check src tests
 python -m mypy
-python -m pytest
 python -m build
 git diff --check
 python scripts/check_sensitive.py
@@ -177,4 +163,4 @@ python scripts/check_sensitive.py
 
 ## 许可证
 
-项目代码采用 MIT License；硬件 SDK 和可选依赖遵循各自许可证。
+项目代码使用 MIT 许可证。第三方硬件 SDK 的许可证和分发条件独立适用。

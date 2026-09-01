@@ -37,7 +37,7 @@ def test_collect_product_config_uses_defaults_and_strict_values() -> None:
     messages: list[str] = []
     config = collect_product_config(
         input_fn=answers(
-            ["", "camera-001", "", "", "can0", "", "", "", "", ""]
+            ["", "dabai", "camera-001", "", "", "can0", "", "", "", "", ""]
         ),
         print_fn=messages.append,
     )
@@ -45,7 +45,11 @@ def test_collect_product_config_uses_defaults_and_strict_values() -> None:
     assert config.as_dict() == {
         "mode": "eye-to-hand",
         "policy": "standard",
-        "camera": {"serial_number": "camera-001"},
+        "camera": {
+            "adapter": "dabai",
+            "source_id": "camera-001",
+            "settings": {},
+        },
         "piper": {
             "model": "piper",
             "firmware_profile": "v188",
@@ -72,12 +76,92 @@ def test_config_summary_supports_generic_camera_descriptor() -> None:
     assert "相机适配器：realsense-d435" in summary
 
 
+def test_collect_product_config_supports_d435_settings() -> None:
+    config = collect_product_config(
+        input_fn=answers(
+            [
+                "",
+                "realsense-d435",
+                "camera-d435",
+                "",
+                "",
+                "",
+                "",
+                "0",
+                "",
+                "",
+                "can0",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ]
+        ),
+        print_fn=lambda _message: None,
+    )
+
+    assert config.camera.adapter == "realsense-d435"
+    assert config.camera.settings == {
+        "width": 1280,
+        "height": 720,
+        "fps": 30,
+        "timeout_ms": 5000,
+        "warmup_frames": 0,
+    }
+
+
+def test_collect_product_config_supports_calibrated_rgb_settings() -> None:
+    config = collect_product_config(
+        input_fn=answers(
+            [
+                "",
+                "opencv-rgb",
+                "",
+                "640",
+                "480",
+                "30",
+                "0",
+                "",
+                "600",
+                "601",
+                "320",
+                "240",
+                "brown-conrady",
+                "0,0,0,0,0",
+                "",
+                "",
+                "",
+                "can0",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ]
+        ),
+        print_fn=lambda _message: None,
+    )
+
+    assert config.camera.adapter == "opencv-rgb"
+    assert config.camera.source_id == "0"
+    assert config.as_dict()["camera"]["settings"]["intrinsics"] == {
+        "fx": 600.0,
+        "fy": 601.0,
+        "cx": 320.0,
+        "cy": 240.0,
+        "distortion_model": "brown-conrady",
+        "distortion_coefficients": [0.0, 0.0, 0.0, 0.0, 0.0],
+    }
+
+
 def test_collect_product_config_rejects_invalid_marker_size_then_retries() -> None:
     messages: list[str] = []
     config = collect_product_config(
         input_fn=answers(
             [
                 "",
+                "dabai",
                 "camera-001",
                 "",
                 "",
@@ -191,7 +275,7 @@ def test_temporary_channel_override_is_used_for_task_only(monkeypatch, tmp_path:
         captured.append(config if can_channel is None else config.__class__(
             config.mode,
             config.policy,
-            config.camera_serial_number,
+                config.camera,
             config.piper_model,
             config.piper_firmware_profile,
             can_channel,
